@@ -26,7 +26,7 @@ Matrix identityMatrix(int n) {
 }
 
 // Печать матрицы
-void printMatrix(const Matrix &A, const string &name) {
+void printMatrix(const Matrix& A, const string& name) {
 	cout << name << " (" << A.size() << "x" << (A.empty() ? 0 : A[0].size()) << "):\n";
 	int rows = (int)A.size();
 	int cols = rows ? (int)A[0].size() : 0;
@@ -40,14 +40,14 @@ void printMatrix(const Matrix &A, const string &name) {
 }
 
 // Печать вектора
-void printVector(const Vector &v, const string &name) {
+void printVector(const Vector& v, const string& name) {
 	cout << name << " (" << v.size() << "):\n";
 	for (double x : v) cout << setw(12) << x << " ";
 	cout << "\n\n";
 }
 
 // Умножение матрицы на вектор
-Vector matVec(const Matrix &A, const Vector &x) {
+Vector matVec(const Matrix& A, const Vector& x) {
 	int m = (int)A.size();
 	int n = m ? (int)A[0].size() : 0;
 	Vector y(m, 0.0);
@@ -60,7 +60,7 @@ Vector matVec(const Matrix &A, const Vector &x) {
 }
 
 // Транспонирование матрицы
-Matrix transpose(const Matrix &A) {
+Matrix transpose(const Matrix& A) {
 	int m = (int)A.size();
 	int n = m ? (int)A[0].size() : 0;
 	Matrix AT = makeMatrix(n, m, 0.0);
@@ -71,7 +71,7 @@ Matrix transpose(const Matrix &A) {
 }
 
 // Умножение матриц C = A * B
-Matrix matMul(const Matrix &A, const Matrix &B) {
+Matrix matMul(const Matrix& A, const Matrix& B) {
 	int m = (int)A.size();
 	int k = m ? (int)A[0].size() : 0;
 	int n = (int)B[0].size();
@@ -87,7 +87,7 @@ Matrix matMul(const Matrix &A, const Matrix &B) {
 }
 
 // Скалярное произведение
-double dot(const Vector &a, const Vector &b) {
+double dot(const Vector& a, const Vector& b) {
 	double s = 0.0;
 	int n = (int)a.size();
 	for (int i = 0; i < n; ++i) s += a[i] * b[i];
@@ -95,14 +95,14 @@ double dot(const Vector &a, const Vector &b) {
 }
 
 // Евклидова норма вектора
-double norm2(const Vector &v) {
+double norm2(const Vector& v) {
 	return sqrt(dot(v, v));
 }
 
 // Норма Фробениуса матрицы
-double frobNorm(const Matrix &A) {
+double frobNorm(const Matrix& A) {
 	double s = 0.0;
-	for (const auto &row : A)
+	for (const auto& row : A)
 		for (double x : row) s += x * x;
 	return sqrt(s);
 }
@@ -128,7 +128,7 @@ struct GKResult {
 	Vector beta;   // наддиагональ B (beta[0] — beta1 из алгоритма, в B не входит)
 };
 
-GKResult golubKahan(const Matrix &A) {
+GKResult golubKahan(const Matrix& A) {
 	int m = (int)A.size();
 	int n = m ? (int)A[0].size() : 0;
 	int p = min(m, n);
@@ -236,10 +236,9 @@ GKResult golubKahan(const Matrix &A) {
 	return res;
 }
 
-// ---------------- Пункт 2: Диагонализация T методом Якоби ----------------
-// (итерационный ортогональный метод для симметричных матриц)
+// ---------------- Пункт 2: Диагонализация симметричной матрицы (Якоби) ----------------
 
-void jacobiEigenSymmetric(Matrix A, Matrix &Q, Vector &eigs) {
+void jacobiEigenSymmetric(Matrix A, Matrix& Q, Vector& eigs) {
 	int n = (int)A.size();
 	Q = identityMatrix(n);
 	const int maxIter = 100 * n * n;
@@ -269,7 +268,7 @@ void jacobiEigenSymmetric(Matrix A, Matrix &Q, Vector &eigs) {
 		double c = cos(phi);
 		double s = sin(phi);
 
-		// Обновление A = J^T A J, J — вращение в плоскости (p,q)
+		// Обновление A = J^T*A*J, J — вращение в плоскости (p,q)
 		for (int k = 0; k < n; ++k) {
 			double aik = A[p][k];
 			double aqk = A[q][k];
@@ -312,12 +311,61 @@ void jacobiEigenSymmetric(Matrix A, Matrix &Q, Vector &eigs) {
 	Q = Q_sorted;
 }
 
+// -------- SVD через A^T*A (точное разложение) --------
+
+void svdViaATA(const Matrix& A, Matrix& U, Vector& sigma, Matrix& V) {
+	int m = (int)A.size();
+	int n = m ? (int)A[0].size() : 0;
+	Matrix AT = transpose(A);
+	Matrix ATA = matMul(AT, A);       // n x n
+
+	Matrix Qe;                        // собственные векторы ATA
+	Vector lambda;                    // собственные значения ATA
+	jacobiEigenSymmetric(ATA, Qe, lambda);
+
+	int p = min(m, n);                // число сингулярных чисел
+	sigma.clear();
+	U = makeMatrix(m, 0, 0.0);
+	V = makeMatrix(n, 0, 0.0);
+
+	// Берем первые p положительных собственных значений
+	for (int k = 0; k < (int)lambda.size() && (int)sigma.size() < p; ++k) {
+		double lam = lambda[k];
+		if (lam < 0.0) lam = 0.0;
+		double s = sqrt(lam);
+		if (s < 1e-12) continue; // нулевые / слишком маленькие пропускаем
+
+		sigma.push_back(s);
+
+		// Правый сингулярный вектор v_k — столбец Qe
+		int newIndex = (int)sigma.size() - 1;
+		if ((int)V[0].size() < (int)sigma.size()) {
+			// расширяем V по столбцам
+			for (int i = 0; i < n; ++i) V[i].push_back(0.0);
+		}
+		for (int i = 0; i < n; ++i) V[i][newIndex] = Qe[i][k];
+
+		// Левый сингулярный вектор u_k = (1 / s) * A * v_k
+		Vector vk(n);
+		for (int i = 0; i < n; ++i) vk[i] = V[i][newIndex];
+		Vector uk = matVec(A, vk);
+
+		if ((int)U[0].size() < (int)sigma.size()) {
+			// расширяем U по столбцам
+			for (int i = 0; i < m; ++i) U[i].push_back(0.0);
+		}
+		for (int i = 0; i < m; ++i) U[i][newIndex] = uk[i] / s;
+	}
+}
+
 // ---------------- Пункты 3–4: Демонстрация, SVD и оценка погрешности ----------------
 
 int main() {
 	setlocale(LC_ALL, "Russian");
 	ios::sync_with_stdio(false);
 	cin.tie(nullptr);
+
+	cout << fixed << setprecision(6);
 
 	int m, n;
 	cout << "Введите размеры матрицы A (m n): ";
@@ -356,53 +404,35 @@ int main() {
 	Matrix T = matMul(BT, gk.B);
 	printMatrix(T, "Матрица T = B^T * B");
 
-	Matrix Qe;
-	Vector lambda;
-	jacobiEigenSymmetric(T, Qe, lambda);
-
-	printMatrix(Qe, "Матрица собственных векторов Q_e (для T)");
-	printVector(lambda, "Собственные значения T (sigma_i^2)");
+	Matrix Qe_T;
+	Vector lambda_T;
+	jacobiEigenSymmetric(T, Qe_T, lambda_T);
+	printMatrix(Qe_T, "Матрица собственных векторов Q_e (для T)");
+	printVector(lambda_T, "Собственные значения T (приближенно sigma_i^2)");
 
 	cout << "\n============================================================\n";
-	cout << "ПУНКТ 3. Сингулярные числа и сингулярные векторы\n";
+	cout << "ПУНКТ 3. Сингулярные числа и сингулярные векторы (точное SVD через A^T*A)\n";
 	cout << "============================================================\n";
 
-	Vector sigma(p, 0.0);
-	for (int i = 0; i < p; ++i) {
-		double v = lambda[i];
-		if (v < 0.0) v = 0.0;
-		sigma[i] = sqrt(v);
-	}
-	printVector(sigma, "Сингулярные числа sigma_i");
+	Matrix U_svd, V_svd;
+	Vector sigma;
+	svdViaATA(A, U_svd, sigma, V_svd);
 
-	Matrix Ue = makeMatrix(p, p, 0.0);
-	for (int k = 0; k < p; ++k) {
-		Vector vB(p, 0.0);
-		for (int i = 0; i < p; ++i) vB[i] = Qe[i][k];
-		Vector uB = matVec(gk.B, vB);
-		if (sigma[k] > 1e-15) {
-			for (int i = 0; i < p; ++i) uB[i] /= sigma[k];
-		}
-		for (int i = 0; i < p; ++i) Ue[i][k] = uB[i];
-	}
-
-	printMatrix(Ue, "Матрица U_e (левые сингулярные векторы B)");
-
-	Matrix U_svd = matMul(gk.U, Ue);
-	Matrix V_svd = matMul(gk.V, Qe);
-
-	printMatrix(U_svd, "USVD (левые сингулярные векторы A)");
-	printMatrix(V_svd, "VSVD (правые сингулярные векторы A)");
+	printVector(sigma, "Сингулярные числа sigma_i (из A^T*A)");
+	printMatrix(U_svd, "U (левые сингулярные векторы A)");
+	printMatrix(V_svd, "V (правые сингулярные векторы A)");
 
 	cout << "\n============================================================\n";
 	cout << "ПУНКТ 4. Восстановление A и оценка точности SVD\n";
 	cout << "============================================================\n";
 
-	Matrix SigmaMat = makeMatrix(p, p, 0.0);
-	for (int i = 0; i < p; ++i) SigmaMat[i][i] = sigma[i];
-	Matrix US = matMul(U_svd, SigmaMat);
-	Matrix Vt = transpose(V_svd);
-	Matrix A_approx = matMul(US, Vt);
+	int r = (int)sigma.size();
+	Matrix SigmaMat = makeMatrix(r, r, 0.0);
+	for (int i = 0; i < r; ++i) SigmaMat[i][i] = sigma[i];
+
+	Matrix US = matMul(U_svd, SigmaMat);   // m x r
+	Matrix Vt = transpose(V_svd);          // r x n
+	Matrix A_approx = matMul(US, Vt);      // m x n
 
 	printMatrix(A_approx, "Восстановленная матрица A_approx по SVD");
 
@@ -417,13 +447,12 @@ int main() {
 	cout << "||A||_F = " << normA << "\n";
 	cout << "||A - A_approx||_F = " << normDiff << "\n";
 	cout << "Относительная погрешность по норме Фробениуса: "
-		<< (normA > 0 ? normDiff / normA : 0.0) << "\n";
+		<< (normA > 0 ? normDiff / normA : 0.0) << "\n\n";
 
-	cout << "\nПроверка сингулярных пар (невязка (A^T A v - sigma^2 v)):\n";
-
+	cout << "Проверка сингулярных пар (невязка (A^T*A*v - (sigma^2)*v)):\n";
 	Matrix AT = transpose(A);
 	Matrix ATA = matMul(AT, A);
-	for (int k = 0; k < p; ++k) {
+	for (int k = 0; k < r; ++k) {
 		Vector vk(n, 0.0);
 		for (int i = 0; i < n; ++i) vk[i] = V_svd[i][k];
 
